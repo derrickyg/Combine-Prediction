@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import os
 
 def convert_height_to_inches(height_str):
     """
@@ -21,9 +22,13 @@ def convert_height_to_inches(height_str):
         return np.nan
 
 def preprocess_data():
+    # Get the directory where the script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
     # Read the data
     print("Loading data...")
-    df = pd.read_csv('nba_combine_and_rookie_stats.csv')
+    input_file = os.path.join(script_dir, 'nba_combine_and_rookie_stats.csv')
+    df = pd.read_csv(input_file)
     
     # Remove USAGE_RATE and PLUS_MINUS columns
     print("Removing USAGE_RATE and PLUS_MINUS columns...")
@@ -31,7 +36,7 @@ def preprocess_data():
     
     # Remove rows where minutes are blank
     print("Removing rows with blank minutes...")
-    df = df.dropna(subset=['MINUTES', 'POINTS'])
+    df = df.dropna(subset=['MINUTES'])
     
     # Convert height and reach measurements to inches
     print("Converting height and reach measurements to inches...")
@@ -48,9 +53,18 @@ def preprocess_data():
             df[new_col_name] = df[col].apply(convert_height_to_inches)
             print(f"Converted {col} to {new_col_name}")
     
+    # Calculate PRA_PERMIN
+    print("Calculating PRA_PERMIN...")
+    df['PRA_PERMIN'] = (df['POINTS'] + df['REBOUNDS'] + df['ASSISTS']) / df['MINUTES']
+    
+    # Remove original height/reach columns
+    print("Removing original height/reach columns...")
+    df = df.drop(height_columns, axis=1, errors='ignore')
+    
     # Save the preprocessed data
     print("Saving preprocessed data...")
-    df.to_csv('nba_combine_and_rookie_stats_preprocessed.csv', index=False)
+    output_file = os.path.join(script_dir, 'nba_combine_and_rookie_stats_preprocessed.csv')
+    df.to_csv(output_file, index=False)
     
     # Display information about the preprocessed dataset
     print("\nPreprocessed Dataset Info:")
