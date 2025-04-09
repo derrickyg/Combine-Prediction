@@ -10,17 +10,7 @@ def load_data():
 
 def show_top_rookie_metrics(n=30):
     df = load_data()
-    df = df.dropna()
     print(df.describe())
-
-    df['ROOKIE_SCORE'] = (
-    df['POINTS']
-    + 0.4 * df['FIELD_GOAL_PCT'] * df['POINTS']
-    + 0.7 * df['REBOUNDS']
-    + 0.7 * df['ASSISTS']
-    + df['STEALS']
-    + df['BLOCKS']
-    - df['TURNOVERS'])
 
 
     for metric in ['ROOKIE_SCORE']:

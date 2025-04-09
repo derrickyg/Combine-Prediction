@@ -222,6 +222,76 @@ def find_duplicates(df):
                 print(f"Dropping {len(rows_to_drop)} duplicate rows")
                 df = df.drop(rows_to_drop)
     
+    # Special case: Check for PJ Washington specifically
+    pj_washington_rows = df[df['LAST_NAME'].str.contains('Washington', na=False) & 
+                           (df['FIRST_NAME'].str.contains('PJ', na=False) | 
+                            df['FIRST_NAME'].str.contains('P.J', na=False))]
+    
+    if len(pj_washington_rows) > 1:
+        print(f"Found {len(pj_washington_rows)} entries for PJ Washington")
+        # Keep the row with the most non-null values
+        non_null_counts = pj_washington_rows.count(axis=1)
+        best_row_idx = non_null_counts.idxmax()
+        
+        # Drop other rows
+        for idx in pj_washington_rows.index:
+            if idx != best_row_idx:
+                print(f"Dropping duplicate PJ Washington row with index {idx}")
+                df = df.drop(idx)
+    
+    # Check for players with the same rookie stats across different seasons
+    rookie_stats_columns = [
+        'GAMES_PLAYED', 'MINUTES', 'POINTS', 'REBOUNDS', 'ASSISTS',
+        'STEALS', 'BLOCKS', 'TURNOVERS', 'FIELD_GOAL_PCT', 'THREE_POINT_PCT',
+        'FREE_THROW_PCT'
+    ]
+    
+    # Filter to only include columns that exist in the dataframe
+    existing_rookie_columns = [col for col in rookie_stats_columns if col in df.columns]
+    
+    if existing_rookie_columns:
+        # Group by standardized names and rookie stats
+        name_columns = ['FIRST_NAME_STD', 'LAST_NAME_STD'] if 'FIRST_NAME_STD' in df.columns else ['FIRST_NAME', 'LAST_NAME']
+        
+        # Create a key for grouping based on name and rookie stats
+        df['rookie_stats_key'] = df[name_columns].apply(lambda x: ' '.join(x.astype(str)), axis=1)
+        for col in existing_rookie_columns:
+            df['rookie_stats_key'] += df[col].astype(str)
+        
+        # Find duplicates based on the rookie stats key
+        duplicate_keys = df['rookie_stats_key'].value_counts()
+        duplicate_keys = duplicate_keys[duplicate_keys > 1]
+        
+        if not duplicate_keys.empty:
+            print(f"Found {len(duplicate_keys)} players with identical rookie stats across different seasons")
+            
+            # For each set of duplicates, keep the row with the earliest draft year
+            rows_to_drop = []
+            
+            for key in duplicate_keys.index:
+                # Get all rows with this key
+                key_rows = df[df['rookie_stats_key'] == key]
+                
+                # Sort by draft year
+                key_rows = key_rows.sort_values('DRAFT_YEAR')
+                
+                # Keep the first row (earliest draft year)
+                keep_idx = key_rows.index[0]
+                
+                # Add other rows to the drop list
+                for idx in key_rows.index[1:]:
+                    player_name = f"{key_rows.loc[idx, 'FIRST_NAME']} {key_rows.loc[idx, 'LAST_NAME']}"
+                    print(f"Dropping duplicate {player_name} row with index {idx} (same rookie stats as draft year {key_rows.loc[keep_idx, 'DRAFT_YEAR']})")
+                    rows_to_drop.append(idx)
+            
+            # Drop the duplicate rows
+            if rows_to_drop:
+                print(f"Dropping {len(rows_to_drop)} duplicate rows with identical rookie stats")
+                df = df.drop(rows_to_drop)
+        
+        # Drop the temporary key column
+        df = df.drop(columns=['rookie_stats_key'])
+    
     # Drop the standardized name columns
     std_columns = [col for col in df.columns if col.endswith('_STD')]
     if std_columns:
@@ -249,7 +319,7 @@ def preprocess_data(df):
     
     # Remove duplicate rows (as a fallback)
     initial_rows = len(df)
-    df = df.drop_duplicates()
+    df = df.drop_duplicates(subset=['FIRST_NAME', 'LAST_NAME', 'DRAFT_YEAR'])
     removed_rows = initial_rows - len(df)
     if removed_rows > 0:
         print(f"Removed {removed_rows} duplicate rows")
@@ -506,6 +576,15 @@ def main():
     
     # Check for duplicates
     check_for_duplicates(processed_df)
+
+    processed_df['ROOKIE_SCORE'] = (
+    processed_df['POINTS']
+    + 0.4 * processed_df['FIELD_GOAL_PCT'] * processed_df['POINTS']
+    + 0.7 * processed_df['REBOUNDS']
+    + 0.7 * processed_df['ASSISTS']
+    + processed_df['STEALS']
+    + processed_df['BLOCKS']
+    - processed_df['TURNOVERS'])
     
     # Save the processed data
     output_file = 'combined.csv'
