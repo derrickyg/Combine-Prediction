@@ -21,7 +21,6 @@ def show_top_rookie_metrics(n=30):
     - df['TURNOVERS'])
 
 
-    # Show top players by PRA_PERMIN, EFF_PERMIN, and GAME_SCORE
     for metric in ['ROOKIE_SCORE']:
         print(f"\nTop {n} Players by {metric}:")
         print("=" * 80)
