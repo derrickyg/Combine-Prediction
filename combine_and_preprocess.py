@@ -80,7 +80,8 @@ def remove_columns(df):
         'OFF_DRIB_FIFTEEN_BREAK_LEFT', 'OFF_DRIB_FIFTEEN_TOP_KEY', 
         'OFF_DRIB_FIFTEEN_BREAK_RIGHT', 'OFF_DRIB_COLLEGE_BREAK_LEFT', 
         'OFF_DRIB_COLLEGE_TOP_KEY', 'OFF_DRIB_COLLEGE_BREAK_RIGHT', 
-        'ON_MOVE_FIFTEEN', 'ON_MOVE_COLLEGE'
+        'ON_MOVE_FIFTEEN', 'ON_MOVE_COLLEGE', 'HEIGHT_W_SHOES',
+        'TEMP_PLAYER_ID', 'HEIGHT_WO_SHOES_INCHES', 'HEIGHT_W_SHOES_INCHES'
     ]
     
     # Only remove columns that exist in the dataframe
@@ -251,17 +252,18 @@ def organize_columns(df):
     
     # Define column groups
     id_columns = [
-        'PLAYER_ID', 'PLAYER', 'FIRST_NAME', 'LAST_NAME', 'DRAFT_YEAR', 'TEAM'
+        'PLAYER_ID', 'PLAYER_NAME', 'FIRST_NAME', 'LAST_NAME', 'POSITION', 'DRAFT_YEAR'
     ]
     
     anthropometric_columns = [
-        'HEIGHT_W_SHOES', 'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN',
+         'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN',
         'STANDING_REACH', 'BODY_FAT_PCT', 'HAND_LENGTH', 'HAND_WIDTH'
     ]
     
     strength_agility_columns = [
         'BENCH_PRESS', 'VERTICAL_LEAP_MAX_REACH', 'VERTICAL_LEAP_NO_STEP',
-        'LANE_AGILITY_TIME', 'SHUTTLE_RUN', 'THREE_QUARTER_SPRINT'
+        'LANE_AGILITY_TIME', 'SHUTTLE_RUN', 'THREE_QUARTER_SPRINT', 'STANDING_VERTICAL_LEAP',
+        'MAX_VERTICAL_LEAP', 'MODIFIED_LANE_AGILITY_TIME'
     ]
     
     rookie_stats_columns = [
