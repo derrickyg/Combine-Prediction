@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score
 import os
 
 def load_data():
@@ -11,15 +12,16 @@ def load_data():
 
 def preprocess_data():
     df = load_data()
-
     features = [
-        'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN', 'STANDING_REACH',
-        'BODY_FAT_PCT', 'HAND_LENGTH', 'HAND_WIDTH', 'LANE_AGILITY_TIME',
-        'THREE_QUARTER_SPRINT', 'STANDING_VERTICAL_LEAP', 'MAX_VERTICAL_LEAP',
-        'MODIFIED_LANE_AGILITY_TIME', 'STANDING_REACH_INCHES'
+        'WEIGHT',
+        'HAND_WIDTH', 'LANE_AGILITY_TIME',
+        'THREE_QUARTER_SPRINT', 'MAX_VERTICAL_LEAP',
+        'MODIFIED_LANE_AGILITY_TIME'
     ]
-
     df = df.dropna(subset=features + ['ROOKIE_SCORE'])
+
+    correlations = df[features + ['ROOKIE_SCORE']].corr()
+    print(correlations['ROOKIE_SCORE'].sort_values(ascending=False))
 
     X = df[features].values
     y = df['ROOKIE_SCORE'].values.reshape(-1, 1)
@@ -172,3 +174,6 @@ if __name__ == "__main__":
     baseline_preds = np.full_like(y_test, baseline_pred)
     baseline_mse = np.mean((baseline_preds - y_test) ** 2)
     print(f"Baseline MSE (predict mean): {baseline_mse:.4f}")
+
+    r2 = r2_score(y_test, y_pred_test)
+    print(f"R^2 Score: {r2:.4f}")
