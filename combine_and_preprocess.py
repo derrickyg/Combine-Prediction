@@ -81,7 +81,8 @@ def remove_columns(df):
         'OFF_DRIB_FIFTEEN_BREAK_RIGHT', 'OFF_DRIB_COLLEGE_BREAK_LEFT', 
         'OFF_DRIB_COLLEGE_TOP_KEY', 'OFF_DRIB_COLLEGE_BREAK_RIGHT', 
         'ON_MOVE_FIFTEEN', 'ON_MOVE_COLLEGE', 'HEIGHT_W_SHOES',
-        'TEMP_PLAYER_ID', 'HEIGHT_WO_SHOES_INCHES', 'HEIGHT_W_SHOES_INCHES'
+        'TEMP_PLAYER_ID', 'HEIGHT_WO_SHOES_INCHES', 'HEIGHT_W_SHOES_INCHES',
+        'SEASON'
     ]
     
     # Only remove columns that exist in the dataframe
@@ -90,8 +91,141 @@ def remove_columns(df):
     if columns_to_remove:
         print(f"Removing {len(columns_to_remove)} columns...")
         df = df.drop(columns=columns_to_remove)
-    else:
-        print("No specified columns found to remove.")
+    
+    # Double check for HEIGHT_W_SHOES and its variants
+    height_columns = [col for col in df.columns if 'HEIGHT_W_SHOES' in col]
+    if height_columns:
+        print(f"Found additional height columns to remove: {height_columns}")
+        df = df.drop(columns=height_columns)
+    
+    return df
+
+def standardize_name(name):
+    """
+    Standardize a name by removing special characters and standardizing common variations
+    """
+    if pd.isna(name):
+        return name
+    
+    # Convert to string if not already
+    name = str(name).strip()
+    
+    # Common name variations to standardize
+    name_variations = {
+        'PJ': 'P J',
+        'AJ': 'A J',
+        'TJ': 'T J',
+        'CJ': 'C J',
+        'JJ': 'J J',
+        'DJ': 'D J',
+        'RJ': 'R J',
+        'JD': 'J D',
+        'JR': 'J R'
+    }
+    
+    # Replace periods and standardize spacing
+    name = name.replace('.', ' ')  # Replace periods with spaces (P.J. -> P J)
+    name = name.replace('-', ' ')  # Replace hyphens with spaces
+    name = name.replace("'", '')   # Remove apostrophes
+    
+    # Replace multiple spaces with a single space
+    name = ' '.join(name.split())
+    
+    # Check for name variations
+    for variation, standard in name_variations.items():
+        # Check for the variation at the start of the name or as a whole word
+        if name.startswith(variation + ' ') or name == variation:
+            name = name.replace(variation, standard, 1)
+    
+    return name.strip()
+
+def standardize_player_names(df):
+    """
+    Standardize player names to handle variations like PJ vs P.J.
+    """
+    print("Standardizing player names...")
+    
+    # Create a copy of the dataframe to avoid modifying the original
+    df = df.copy()
+    
+    # Track name changes for debugging
+    name_changes = []
+    
+    # Standardize FIRST_NAME and LAST_NAME if they exist
+    if 'FIRST_NAME' in df.columns:
+        for idx, row in df.iterrows():
+            original_name = row['FIRST_NAME']
+            standardized_name = standardize_name(original_name)
+            if original_name != standardized_name:
+                name_changes.append(f"{original_name} -> {standardized_name}")
+            df.at[idx, 'FIRST_NAME_STD'] = standardized_name
+    
+    if 'LAST_NAME' in df.columns:
+        df['LAST_NAME_STD'] = df['LAST_NAME'].apply(standardize_name)
+    
+    # Standardize PLAYER_NAME if it exists
+    if 'PLAYER_NAME' in df.columns:
+        df['PLAYER_NAME_STD'] = df['PLAYER_NAME'].apply(standardize_name)
+    
+    # Print name changes for debugging
+    if name_changes:
+        print("\nName standardization changes:")
+        for change in name_changes:
+            print(f"  {change}")
+    
+    return df
+
+def find_duplicates(df):
+    """
+    Find duplicate players based on standardized names and draft year
+    """
+    print("Finding duplicate players...")
+    
+    # Create a copy of the dataframe
+    df = df.copy()
+    
+    # Group by standardized names and draft year
+    if 'FIRST_NAME_STD' in df.columns and 'LAST_NAME_STD' in df.columns:
+        # Group by standardized first and last name
+        duplicates = df.groupby(['FIRST_NAME_STD', 'LAST_NAME_STD', 'DRAFT_YEAR']).size().reset_index(name='count')
+        duplicates = duplicates[duplicates['count'] > 1]
+        
+        if not duplicates.empty:
+            print(f"Found {len(duplicates)} players with duplicate entries")
+            
+            # For each set of duplicates, keep the row with the most complete data
+            rows_to_drop = []
+            
+            for _, row in duplicates.iterrows():
+                first_name = row['FIRST_NAME_STD']
+                last_name = row['LAST_NAME_STD']
+                draft_year = row['DRAFT_YEAR']
+                
+                # Get all rows for this player
+                player_rows = df[(df['FIRST_NAME_STD'] == first_name) & 
+                                (df['LAST_NAME_STD'] == last_name) & 
+                                (df['DRAFT_YEAR'] == draft_year)]
+                
+                # Count non-null values in each row
+                non_null_counts = player_rows.count(axis=1)
+                
+                # Find the row with the most non-null values
+                best_row_idx = non_null_counts.idxmax()
+                
+                # Add other rows to the drop list
+                for idx in player_rows.index:
+                    if idx != best_row_idx:
+                        rows_to_drop.append(idx)
+            
+            # Drop the duplicate rows
+            if rows_to_drop:
+                print(f"Dropping {len(rows_to_drop)} duplicate rows")
+                df = df.drop(rows_to_drop)
+    
+    # Drop the standardized name columns
+    std_columns = [col for col in df.columns if col.endswith('_STD')]
+    if std_columns:
+        df = df.drop(columns=std_columns)
     
     return df
 
@@ -107,11 +241,18 @@ def preprocess_data(df):
     # Drop rows where all values are NaN
     df = df.dropna(axis=0, how='all')
     
-    # Remove duplicate rows
+    # Standardize player names
+    df = standardize_player_names(df)
+    
+    # Find and remove duplicates based on standardized names
+    df = find_duplicates(df)
+    
+    # Remove duplicate rows (as a fallback)
     initial_rows = len(df)
     df = df.drop_duplicates()
     removed_rows = initial_rows - len(df)
-    print(f"Removed {removed_rows} duplicate rows")
+    if removed_rows > 0:
+        print(f"Removed {removed_rows} duplicate rows")
     
     # Filter out players without rookie year stats
     rookie_stats_columns = [
@@ -203,40 +344,45 @@ def clean_duplicate_columns(df):
     print("Cleaning up duplicate columns...")
     
     # Find columns with _x and _y suffixes
-    x_columns = [col for col in df.columns if col.endswith('_x')]
-    y_columns = [col for col in df.columns if col.endswith('_y')]
+    base_columns = {}
+    for col in df.columns:
+        if col.endswith('_x') or col.endswith('_y'):
+            base_name = col[:-2]  # Remove _x or _y suffix
+            if base_name not in base_columns:
+                base_columns[base_name] = []
+            base_columns[base_name].append(col)
     
-    # Create a mapping of base column names to their _x and _y versions
-    column_mapping = {}
-    for x_col in x_columns:
-        base_col = x_col[:-2]  # Remove _x suffix
-        y_col = base_col + '_y'
-        if y_col in y_columns:
-            column_mapping[base_col] = (x_col, y_col)
-    
-    # For each pair of duplicate columns, keep the one with fewer NaN values
+    # For each set of duplicate columns, keep the one with fewer NaN values
     columns_to_drop = []
-    for base_col, (x_col, y_col) in column_mapping.items():
-        # Count NaN values in each column
-        x_nan_count = df[x_col].isna().sum()
-        y_nan_count = df[y_col].isna().sum()
-        
-        # Keep the column with fewer NaN values
-        if x_nan_count <= y_nan_count:
-            # Rename x_col to base_col and drop y_col
-            df = df.rename(columns={x_col: base_col})
-            columns_to_drop.append(y_col)
-        else:
-            # Rename y_col to base_col and drop x_col
-            df = df.rename(columns={y_col: base_col})
-            columns_to_drop.append(x_col)
+    columns_to_rename = {}
     
-    # Drop the columns we decided to remove
+    for base_name, duplicate_cols in base_columns.items():
+        if len(duplicate_cols) > 1:
+            # Count NaN values in each duplicate column
+            nan_counts = {}
+            for col in duplicate_cols:
+                nan_counts[col] = df[col].isna().sum()
+            
+            # Find the column with the fewest NaN values
+            best_col = min(nan_counts, key=nan_counts.get)
+            
+            # Add other columns to drop list
+            for col in duplicate_cols:
+                if col != best_col:
+                    columns_to_drop.append(col)
+            
+            # Rename the best column to the base name
+            columns_to_rename[best_col] = base_name
+    
+    # Drop duplicate columns
     if columns_to_drop:
+        print(f"Dropping {len(columns_to_drop)} duplicate columns")
         df = df.drop(columns=columns_to_drop)
-        print(f"Cleaned up {len(columns_to_drop)} duplicate columns")
-    else:
-        print("No duplicate columns found")
+    
+    # Rename columns
+    if columns_to_rename:
+        print(f"Renaming {len(columns_to_rename)} columns")
+        df = df.rename(columns=columns_to_rename)
     
     return df
 
@@ -252,18 +398,18 @@ def organize_columns(df):
     
     # Define column groups
     id_columns = [
-        'PLAYER_ID', 'PLAYER_NAME', 'FIRST_NAME', 'LAST_NAME', 'POSITION', 'DRAFT_YEAR'
+        'PLAYER_ID', 'PLAYER_NAME', 'FIRST_NAME', 'LAST_NAME', 'POSITION', 'DRAFT_YEAR', 'SEASON'
     ]
     
     anthropometric_columns = [
-         'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN',
-        'STANDING_REACH', 'BODY_FAT_PCT', 'HAND_LENGTH', 'HAND_WIDTH'
+        'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN',
+        'STANDING_REACH', 'BODY_FAT_PCT', 'HAND_LENGTH', 'HAND_WIDTH', 'WINGSPAN_INCHES'
     ]
     
     strength_agility_columns = [
-        'BENCH_PRESS', 'VERTICAL_LEAP_MAX_REACH', 'VERTICAL_LEAP_NO_STEP',
+        'VERTICAL_LEAP_MAX_REACH', 'VERTICAL_LEAP_NO_STEP',
         'LANE_AGILITY_TIME', 'SHUTTLE_RUN', 'THREE_QUARTER_SPRINT', 'STANDING_VERTICAL_LEAP',
-        'MAX_VERTICAL_LEAP', 'MODIFIED_LANE_AGILITY_TIME'
+        'MAX_VERTICAL_LEAP', 'MODIFIED_LANE_AGILITY_TIME', 'STANDING_REACH_INCHES'
     ]
     
     rookie_stats_columns = [
@@ -282,7 +428,10 @@ def organize_columns(df):
     ordered_columns = id_columns + anthropometric_columns + strength_agility_columns + rookie_stats_columns
     
     # Add any remaining columns that weren't in our predefined groups
-    remaining_columns = [col for col in df.columns if col not in ordered_columns]
+    # Exclude PRA_PERMIN and HEIGHT_W_SHOES
+    remaining_columns = [col for col in df.columns if col not in ordered_columns 
+                        and 'HEIGHT_W_SHOES' not in col 
+                        and col != 'PRA_PERMIN']
     ordered_columns = ordered_columns + remaining_columns
     
     # Reorder the dataframe
@@ -290,6 +439,48 @@ def organize_columns(df):
     
     print(f"Organized columns into {len(id_columns)} ID columns, {len(anthropometric_columns)} anthropometric columns, "
           f"{len(strength_agility_columns)} strength/agility columns, and {len(rookie_stats_columns)} rookie stats columns")
+    
+    return df
+
+def check_for_duplicates(df):
+    """
+    Check for and display duplicate players in the dataset
+    """
+    print("\nChecking for duplicate players...")
+    
+    # Create standardized name columns
+    df = standardize_player_names(df)
+    
+    # Group by standardized names and draft year
+    if 'FIRST_NAME_STD' in df.columns and 'LAST_NAME_STD' in df.columns:
+        # Group by standardized first and last name
+        duplicates = df.groupby(['FIRST_NAME_STD', 'LAST_NAME_STD', 'DRAFT_YEAR']).size().reset_index(name='count')
+        duplicates = duplicates[duplicates['count'] > 1]
+        
+        if not duplicates.empty:
+            print(f"Found {len(duplicates)} players with duplicate entries:")
+            
+            # Display the duplicate players
+            for _, row in duplicates.iterrows():
+                first_name = row['FIRST_NAME_STD']
+                last_name = row['LAST_NAME_STD']
+                draft_year = row['DRAFT_YEAR']
+                
+                # Get all rows for this player
+                player_rows = df[(df['FIRST_NAME_STD'] == first_name) & 
+                                (df['LAST_NAME_STD'] == last_name) & 
+                                (df['DRAFT_YEAR'] == draft_year)]
+                
+                print(f"\n{first_name} {last_name} (Draft Year: {draft_year}):")
+                for idx, player_row in player_rows.iterrows():
+                    print(f"  - {player_row['FIRST_NAME']} {player_row['LAST_NAME']} (ID: {player_row['PLAYER_ID']})")
+        else:
+            print("No duplicate players found.")
+    
+    # Drop the standardized name columns
+    std_columns = [col for col in df.columns if col.endswith('_STD')]
+    if std_columns:
+        df = df.drop(columns=std_columns)
     
     return df
 
@@ -312,6 +503,9 @@ def main():
     
     # Organize columns
     processed_df = organize_columns(processed_df)
+    
+    # Check for duplicates
+    check_for_duplicates(processed_df)
     
     # Save the processed data
     output_file = 'combined.csv'

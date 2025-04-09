@@ -5,11 +5,13 @@ import os
 def load_data():
     """Load the preprocessed data"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_path = os.path.join(script_dir, 'nba_combine_and_rookie_stats_preprocessed.csv')
+    data_path = os.path.join(script_dir, 'combined.csv')
     return pd.read_csv(data_path)
 
 def show_top_rookie_metrics(n=30):
     df = load_data()
+    df = df.dropna()
+    print(df.describe())
 
     df['ROOKIE_SCORE'] = (
     df['POINTS']
