@@ -92,12 +92,77 @@ class MLP:
     def predict(self, X):
         return self.forward(X)
 
+class DeepMLP:
+    def __init__(self, input_dim, hidden_dim1, hidden_dim2):
+        self.W1 = np.random.randn(input_dim, hidden_dim1) * 0.1
+        self.b1 = np.zeros((1, hidden_dim1))
+        self.W2 = np.random.randn(hidden_dim1, hidden_dim2) * 0.1
+        self.b2 = np.zeros((1, hidden_dim2))
+        self.W3 = np.random.randn(hidden_dim2, 1) * 0.1
+        self.b3 = np.zeros((1, 1))
+
+    def tanh(self, x):
+        return np.tanh(x)
+
+    def tanh_deriv(self, x):
+        return 1 - np.tanh(x) ** 2
+
+    def forward(self, X):
+        self.z1 = X @ self.W1 + self.b1
+        self.h1 = self.tanh(self.z1)
+
+        self.z2 = self.h1 @ self.W2 + self.b2
+        self.h2 = self.tanh(self.z2)
+
+        self.z3 = self.h2 @ self.W3 + self.b3
+        return self.z3
+
+    def loss(self, y_pred, y):
+        return np.mean((y_pred - y) ** 2)
+
+    def backward(self, X, y, y_pred, lr):
+        n = X.shape[0]
+
+        dz3 = (y_pred - y)
+        dW3 = self.h2.T @ dz3 / n
+        db3 = np.sum(dz3, axis=0, keepdims=True) / n
+
+        dh2 = dz3 @ self.W3.T
+        dz2 = dh2 * self.tanh_deriv(self.z2)
+        dW2 = self.h1.T @ dz2 / n
+        db2 = np.sum(dz2, axis=0, keepdims=True) / n
+
+        dh1 = dz2 @ self.W2.T
+        dz1 = dh1 * self.tanh_deriv(self.z1)
+        dW1 = X.T @ dz1 / n
+        db1 = np.sum(dz1, axis=0, keepdims=True) / n
+
+        self.W1 -= lr * dW1
+        self.b1 -= lr * db1
+        self.W2 -= lr * dW2
+        self.b2 -= lr * db2
+        self.W3 -= lr * dW3
+        self.b3 -= lr * db3
+
+    def train(self, X, y, lr=0.01, epochs=1000):
+        for epoch in range(epochs):
+            y_pred = self.forward(X)
+            loss = self.loss(y_pred, y)
+            self.backward(X, y, y_pred, lr)
+
+            if epoch % 100 == 0:
+                print(f"Epoch {epoch}: Loss = {loss:.4f}")
+
+    def predict(self, X):
+        return self.forward(X)
+
 
 
 if __name__ == "__main__":
     X_train, X_test, y_train, y_test = preprocess_data()
-    model = MLP(input_dim=X_train.shape[1], hidden_dim=16)
-    model.train(X_train, y_train, lr=0.01, epochs=10000)
+    model = DeepMLP(input_dim=X_train.shape[1], hidden_dim1=32, hidden_dim2=16)
+    model.train(X_train, y_train, lr=0.01, epochs=5000)
+
 
     y_pred_test = model.predict(X_test)
     test_loss = model.loss(y_pred_test, y_test)
