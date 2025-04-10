@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score
 import os
+import matplotlib.pyplot as plt
 
 def load_data():
     """Load the preprocessed data"""
@@ -164,16 +165,29 @@ if __name__ == "__main__":
     X_train, X_test, y_train, y_test = preprocess_data()
     model = DeepMLP(input_dim=X_train.shape[1], hidden_dim1=32, hidden_dim2=16)
     model.train(X_train, y_train, lr=0.01, epochs=5000)
-
-
+    
     y_pred_test = model.predict(X_test)
     test_loss = model.loss(y_pred_test, y_test)
     print(f"Test MSE: {test_loss:.4f}")
 
     baseline_pred = np.mean(y_train)
     baseline_preds = np.full_like(y_test, baseline_pred)
-    baseline_mse = np.mean((baseline_preds - y_test) ** 2)
-    print(f"Baseline MSE (predict mean): {baseline_mse:.4f}")
+    baseline_loss = model.loss(baseline_preds, y_test)
+    print(f"Baseline MSE (predict mean): {baseline_loss:.4f}")
 
     r2 = r2_score(y_test, y_pred_test)
     print(f"R^2 Score: {r2:.4f}")
+    
+    y_true = y_test.flatten()
+    y_pred = y_pred_test.flatten()
+
+    plt.figure(figsize=(8, 6))
+    plt.scatter(y_true, y_pred, alpha=0.7, label='Predicted vs Actual')
+    plt.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], 'r--', label='Ideal (y = x)')
+    plt.xlabel('Actual ROOKIE_SCORE')
+    plt.ylabel('Predicted ROOKIE_SCORE')
+    plt.title('Predicted vs Actual Test Scores')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
