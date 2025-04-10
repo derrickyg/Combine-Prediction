@@ -17,7 +17,7 @@ def preprocess_data():
         'WEIGHT',
         'HAND_WIDTH', 'LANE_AGILITY_TIME',
         'THREE_QUARTER_SPRINT', 'MAX_VERTICAL_LEAP',
-        'MODIFIED_LANE_AGILITY_TIME'
+        'MODIFIED_LANE_AGILITY_TIME', 'GAMES_PLAYED'
     ]
     df = df.dropna(subset=features + ['ROOKIE_SCORE'])
 
