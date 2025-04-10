@@ -4,56 +4,90 @@ from datetime import datetime
 import numpy as np
 from typing import Dict, List, Optional
 import time
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 class NBACombineData:
     def __init__(self):
         self.base_url = "https://stats.nba.com/stats"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
+            'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
+            'Host': 'stats.nba.com',
+            'Connection': 'keep-alive',
+            'Referer': 'https://www.nba.com/',
             'x-nba-stats-origin': 'stats',
-            'x-nba-stats-token': 'true',
-            'Origin': 'https://www.nba.com',
-            'Referer': 'https://www.nba.com/'
+            'x-nba-stats-token': 'true'
         }
+        # Create a session with retry strategy
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
+        self.session.headers.update(self.headers)
 
-    def get_combine_data(self, year: int) -> Optional[pd.DataFrame]:
-        """
-        Fetch NBA combine data for a specific year
-        """
+    def get_combine_anthro(self, year: int) -> Optional[pd.DataFrame]:
         try:
-            endpoint = f"{self.base_url}/draftcombineplayeranthro"
+            url = f"{self.base_url}/draftcombineplayeranthro"
             params = {
                 'LeagueID': '00',
                 'SeasonYear': str(year),
-                'Height': 'No',
-                'Weight': 'No',
-                'Wingspan': 'No',
-                'StandingReach': 'No',
-                'BodyFatPct': 'No',
-                'HandLength': 'No',
-                'HandWidth': 'No'
+                'OnlyCurrentSeason': '0'
             }
-            
-            response = requests.get(endpoint, headers=self.headers, params=params)
+            response = self.session.get(url, params=params, timeout=10)
             response.raise_for_status()
-            
             data = response.json()
-            
-            # Extract headers and rows
             headers = data['resultSets'][0]['headers']
             rows = data['resultSets'][0]['rowSet']
-            
-            # Create DataFrame
             df = pd.DataFrame(rows, columns=headers)
-            df['DRAFT_YEAR'] = year  # Add draft year column
+            df['DRAFT_YEAR'] = year
             return df
-            
-        except Exception as e:
-            print(f"Error fetching combine data for year {year}: {str(e)}")
+        except requests.exceptions.RequestException as e:
+            print(f"[ERROR] Anthro {year}: {e}")
             return None
+        except Exception as e:
+            print(f"[ERROR] Anthro {year}: {e}")
+            return None
+
+    def get_combine_athletic(self, year: int) -> Optional[pd.DataFrame]:
+        try:
+            url = f"{self.base_url}/draftcombinenonstationary"
+            params = {
+                'LeagueID': '00',
+                'SeasonYear': str(year),
+                'OnlyCurrentSeason': '0'
+            }
+            response = self.session.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            headers = data['resultSets'][0]['headers']
+            rows = data['resultSets'][0]['rowSet']
+            df = pd.DataFrame(rows, columns=headers)
+            df['DRAFT_YEAR'] = year
+            return df
+        except requests.exceptions.RequestException as e:
+            print(f"[ERROR] Athletic {year}: {e}")
+            return None
+        except Exception as e:
+            print(f"[ERROR] Athletic {year}: {e}")
+            return None
+
+    def get_multiple_years_data(self, start_year: int, num_years: int) -> pd.DataFrame:
+        all_data = []
+        for year in range(start_year, start_year + num_years):
+            print(f"Fetching combine data for {year}...")
+            df = self.get_combined_combine_data(year)
+            if df is not None:
+                all_data.append(df)
+            time.sleep(2)  # Increased delay between requests
+        return self.preprocess_data(pd.concat(all_data, ignore_index=True)) if all_data else pd.DataFrame()
 
     def get_rookie_stats(self, player_id: str, season: str) -> Optional[Dict]:
         """
@@ -70,7 +104,7 @@ class NBACombineData:
                 'PerMode': 'PerGame'
             }
             
-            response = requests.get(endpoint, headers=self.headers, params=params)
+            response = self.session.get(endpoint, params=params, timeout=10)
             response.raise_for_status()
             
             data = response.json()
@@ -128,25 +162,6 @@ class NBACombineData:
         df = df.dropna(subset=numeric_columns, how='all')
         
         return df
-
-    def get_multiple_years_data(self, start_year: int, num_years: int) -> pd.DataFrame:
-        """
-        Fetch combine data for multiple years and combine them
-        """
-        all_data = []
-        
-        for year in range(start_year, start_year + num_years):
-            print(f"Fetching combine data for year {year}...")
-            df = self.get_combine_data(year)
-            if df is not None:
-                all_data.append(df)
-            time.sleep(1)  # Add delay to avoid rate limiting
-            
-        if not all_data:
-            return pd.DataFrame()
-            
-        combined_df = pd.concat(all_data, ignore_index=True)
-        return self.preprocess_data(combined_df)
 
 def main():
     # Initialize the NBA combine data fetcher
