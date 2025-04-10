@@ -42,60 +42,8 @@ def preprocess_data():
 
     return X_train, X_test, y_train, y_test
 
+
 class MLP:
-    def __init__(self, input_dim, hidden_dim):
-        # Weight initialization
-        self.W1 = np.random.randn(input_dim, hidden_dim) * 0.01
-        self.b1 = np.zeros((1, hidden_dim))
-        self.W2 = np.random.randn(hidden_dim, 1) * 0.01
-        self.b2 = np.zeros((1, 1))
-
-    def relu(self, x):
-        return np.maximum(0, x)
-
-    def relu_deriv(self, x):
-        return (x > 0).astype(float)
-
-    def forward(self, X):
-        self.z1 = X @ self.W1 + self.b1      # shape: (n, hidden_dim)
-        self.h1 = self.relu(self.z1)         # ReLU activation
-        self.z2 = self.h1 @ self.W2 + self.b2  # output layer
-        return self.z2                       # no activation on output
-
-    def loss(self, y_pred, y):
-        return np.mean((y_pred - y) ** 2)
-
-    def backward(self, X, y, y_pred, lr):
-        n = X.shape[0]
-
-        dz2 = (y_pred - y)                   # shape: (n, 1)
-        dW2 = self.h1.T @ dz2 / n
-        db2 = np.sum(dz2, axis=0, keepdims=True) / n
-
-        dh1 = dz2 @ self.W2.T
-        dz1 = dh1 * self.relu_deriv(self.z1)  # Use ReLU derivative
-        dW1 = X.T @ dz1 / n
-        db1 = np.sum(dz1, axis=0, keepdims=True) / n
-
-        # Update weights
-        self.W1 -= lr * dW1
-        self.b1 -= lr * db1
-        self.W2 -= lr * dW2
-        self.b2 -= lr * db2
-
-    def train(self, X, y, lr=0.01, epochs=1000):
-        for epoch in range(epochs):
-            y_pred = self.forward(X)
-            loss = self.loss(y_pred, y)
-            self.backward(X, y, y_pred, lr)
-
-            if epoch % 100 == 0:
-                print(f"Epoch {epoch}: Loss = {loss:.4f}")
-
-    def predict(self, X):
-        return self.forward(X)
-
-class DeepMLP:
     def __init__(self, input_dim, hidden_dim1, hidden_dim2):
         self.W1 = np.random.randn(input_dim, hidden_dim1) * 0.1
         self.b1 = np.zeros((1, hidden_dim1))
@@ -163,7 +111,7 @@ class DeepMLP:
 
 if __name__ == "__main__":
     X_train, X_test, y_train, y_test = preprocess_data()
-    model = DeepMLP(input_dim=X_train.shape[1], hidden_dim1=32, hidden_dim2=16)
+    model = MLP(input_dim=X_train.shape[1], hidden_dim1=32, hidden_dim2=16)
     model.train(X_train, y_train, lr=0.01, epochs=5000)
     
     y_pred_test = model.predict(X_test)
