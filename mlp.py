@@ -58,12 +58,18 @@ class MLP:
     def tanh_deriv(self, x):
         return 1 - np.tanh(x) ** 2
 
+    def relu(self, x):
+        return np.maximum(0, x)
+
+    def relu_deriv(self, x):
+        return (x > 0).astype(float)
+
     def forward(self, X):
         self.z1 = X @ self.W1 + self.b1
         self.h1 = self.tanh(self.z1)
 
         self.z2 = self.h1 @ self.W2 + self.b2
-        self.h2 = self.tanh(self.z2)
+        self.h2 = self.relu(self.z2)
 
         self.z3 = self.h2 @ self.W3 + self.b3
         return self.z3
@@ -79,7 +85,7 @@ class MLP:
         db3 = np.sum(dz3, axis=0, keepdims=True) / n
 
         dh2 = dz3 @ self.W3.T
-        dz2 = dh2 * self.tanh_deriv(self.z2)
+        dz2 = dh2 * self.relu_deriv(self.z2)
         dW2 = self.h1.T @ dz2 / n
         db2 = np.sum(dz2, axis=0, keepdims=True) / n
 
@@ -106,6 +112,7 @@ class MLP:
 
     def predict(self, X):
         return self.forward(X)
+
 
 
 
