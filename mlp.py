@@ -19,28 +19,29 @@ def preprocess_data():
         'THREE_QUARTER_SPRINT', 'MAX_VERTICAL_LEAP',
         'MODIFIED_LANE_AGILITY_TIME', 'GAMES_PLAYED'
     ]
-    df = df.dropna(subset=features + ['ROOKIE_SCORE'])
+    df = df.dropna(subset=features + ['ROOKIE_SCORE', 'PLAYER_NAME'])
 
     correlations = df[features + ['ROOKIE_SCORE']].corr()
     print(correlations['ROOKIE_SCORE'].sort_values(ascending=False))
 
     X = df[features].values
     y = df['ROOKIE_SCORE'].values.reshape(-1, 1)
+    names = df['PLAYER_NAME'].values
 
     # Min-Max scaling
     X_min = X.min(axis=0)
     X_max = X.max(axis=0)
     X = (X - X_min) / (X_max - X_min)
 
-    # Add intercept term
-    X = np.hstack([np.ones((X.shape[0], 1)), X])  # shape: (n_samples, n_features + 1)
+    X = np.hstack([np.ones((X.shape[0], 1)), X])
 
-    # Train-test split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
+    # Train-test split (with names)
+    X_train, X_test, y_train, y_test, names_train, names_test = train_test_split(
+        X, y, names, test_size=0.2, random_state=42
     )
 
-    return X_train, X_test, y_train, y_test
+    return X_train, X_test, y_train, y_test, names_train, names_test
+
 
 
 class MLP:
@@ -117,7 +118,7 @@ class MLP:
 
 
 if __name__ == "__main__":
-    X_train, X_test, y_train, y_test = preprocess_data()
+    X_train, X_test, y_train, y_test, names_train, names_test = preprocess_data()
     model = MLP(input_dim=X_train.shape[1], hidden_dim1=32, hidden_dim2=16)
     model.train(X_train, y_train, lr=0.01, epochs=5000)
     
@@ -135,6 +136,15 @@ if __name__ == "__main__":
     
     y_true = y_test.flatten()
     y_pred = y_pred_test.flatten()
+
+
+    top_indices = np.argsort(y_pred)[::-1]  # indices of top predictions
+
+    print("\nTop Predicted ROOKIE_SCORE Players (Test Set):")
+    print(f"{'Player':<25} {'Predicted':>10} {'Actual':>10}")
+    print("-" * 50)
+    for i in top_indices[:10]:  # top 10
+        print(f"{names_test[i]:<25} {y_pred[i]:10.2f} {y_true[i]:10.2f}")
 
     plt.figure(figsize=(8, 6))
     plt.scatter(y_true, y_pred, alpha=0.7, label='Predicted vs Actual')
