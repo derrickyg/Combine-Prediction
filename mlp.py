@@ -117,7 +117,6 @@ class MLP:
 
 
 
-
 if __name__ == "__main__":
     X_train, X_test, y_train, y_test, names_train, names_test = preprocess_data()
     model = MLP(input_dim=X_train.shape[1], hidden_dim1=32, hidden_dim2=16)

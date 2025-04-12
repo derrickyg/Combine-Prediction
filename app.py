@@ -214,18 +214,13 @@ def main():
         - NBA Combine measurements (height, weight, wingspan, etc.)
         - Strength and agility metrics
         - Rookie year statistics
-        
-        ### Features
-        - **Combine Metrics**: Physical measurements and athletic performance data
-        - **Position Encoding**: One-hot encoded player positions
-        - **Rookie Stats**: First-year performance metrics
-        
+
+                    
         ### Model
         The project uses a Multilayer Perceptron (MLP) neural network to predict rookie performance
         based on combine measurements. The model takes into account:
         - Anthropometric measurements
         - Strength and agility metrics
-        - Player position
         
         ### How to Use
         1. Navigate to the "Model Visualization" page using the sidebar
@@ -250,14 +245,12 @@ def main():
         This interactive visualization shows the model's predictions versus actual rookie performance scores.
         - **Blue dots**: Training data predictions
         - **Green dots**: Test data predictions
-        - **Red dashed line**: Perfect prediction line
         - **R² Score**: Indicates how well the model fits the data
         
         **Interactive Features:**
         - Hover over data points to see player details
         - Zoom in/out using the mouse wheel or pinch gestures
         - Pan by clicking and dragging
-        - Reset the view using the home button in the toolbar
         """)
         
         # Create and display the plot
