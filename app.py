@@ -193,14 +193,7 @@ def main():
     
     # Add some spacing
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
-    
-    # Add footer to sidebar
-    st.sidebar.markdown("""
-        <div style="text-align: center; margin-top: 50px; font-size: 0.8rem; color: #666;">
-            <p>NBA Combine Prediction</p>
-            <p>© 2023</p>
-        </div>
-    """, unsafe_allow_html=True)
+
     
     # Display content based on current page
     if st.session_state.current_page == "Home":
