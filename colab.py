@@ -7,16 +7,130 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.spatial.distance import cosine, euclidean
 
-rookie_and_combine = pd.read_csv("nba_combine_and_rookie_stats_preprocessed.csv")
-print(rookie_and_combine)
+# Load data
+rookie_and_combine = pd.read_csv("combined.csv")
+
+# Set index
+rookie_and_combine.set_index('PLAYER_NAME', inplace=True)
+
+# Define combine features
+combine_features = [
+    'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN', 'STANDING_REACH', 'BODY_FAT_PCT',
+    'HAND_LENGTH', 'HAND_WIDTH', 'LANE_AGILITY_TIME', 'THREE_QUARTER_SPRINT',
+    'STANDING_VERTICAL_LEAP', 'MAX_VERTICAL_LEAP', 'MODIFIED_LANE_AGILITY_TIME'
+]
+
+# Drop rows with missing combine features
+rookie_and_combine_filtered = rookie_and_combine.dropna(subset=combine_features).copy()
+
+# Scale features
+scaler = StandardScaler()
+scaled_features = scaler.fit_transform(rookie_and_combine_filtered[combine_features])
+scaled_df = pd.DataFrame(scaled_features, columns=combine_features, index=rookie_and_combine_filtered.index)
+
+# Assign weights (custom)
+weights = np.array([
+    0.15, 0.1, 0.15, 0.15, -0.1,
+    0.05, 0.05, -0.1, -0.1,
+    0.1, 0.1, -0.05
+])
+
+# Compute combine rating
+rookie_and_combine_filtered['COMBINE_RATING'] = scaled_df.dot(weights)
+
+# Add Combine Rating back to original dataset
+rookie_and_combine.loc[rookie_and_combine_filtered.index, 'COMBINE_RATING'] = rookie_and_combine_filtered['COMBINE_RATING']
+
+print(rookie_and_combine.columns.tolist())
+
+# ------------------------------------------
+# Collaborative Filtering Function
+# ------------------------------------------
+
+def predict_rookie_score_cf(data, target_player, similarity_metric='L2', k=5):
+    if target_player not in data.index:
+        print(f"Error: {target_player} not found in dataset.")
+        return None
+
+    # Separate features and known scores
+    features = data.drop(columns=['ROOKIE_SCORE'])
+    known_scores = data['ROOKIE_SCORE']
+
+    # Get target vector
+    target_vector = features.loc[target_player].values
+
+    similarities = {}
+    
+    for player in data.index:
+        if player == target_player:
+            continue
+        if pd.isna(known_scores[player]):
+            continue  # Only use players with known rookie scores
+
+        other_vector = features.loc[player].values
+
+        if similarity_metric == 'Cosine':
+            sim = cosine_similarity([target_vector], [other_vector])[0][0]
+        elif similarity_metric == 'L2':
+            sim = -euclidean(target_vector, other_vector)  # Negative to make it similarity
+        else:
+            raise ValueError("Choose 'Cosine' or 'L2'")
+        
+        similarities[player] = sim
+
+    # Normalize similarities between 0 and 1
+    sim_df = pd.DataFrame.from_dict(similarities, orient='index', columns=['Similarity'])
+    sim_df['Similarity'] = MinMaxScaler().fit_transform(sim_df[['Similarity']])
+    
+    # Take top k similar players
+    top_k = sim_df['Similarity'].nlargest(k)
+
+    # Weighted average of rookie scores
+    weighted_sum = 0
+    sim_sum = 0
+    for player, sim in top_k.items():
+        weighted_sum += sim * known_scores[player]
+        sim_sum += sim
+
+    predicted_score = weighted_sum / sim_sum if sim_sum != 0 else np.nan
+    return predicted_score
+
+# Set the index to player name or ID
+df_features = rookie_and_combine.set_index(['PLAYER_NAME'])
+
+# Keep only combine feature columns (already cleaned/standardized)
+combine_cols = [
+    'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN', 'STANDING_REACH', 'BODY_FAT_PCT',
+    'HAND_LENGTH', 'HAND_WIDTH', 'LANE_AGILITY_TIME', 'THREE_QUARTER_SPRINT',
+    'STANDING_VERTICAL_LEAP', 'MAX_VERTICAL_LEAP', 'MODIFIED_LANE_AGILITY_TIME'
+]
+
+# Build the full matrix for CF
+cf_data = df_features[combine_cols + ['ROOKIE_SCORE']].dropna(subset=combine_cols)
+
+# Predict rookie score for a player like "Mark Williams"
+predicted = predict_rookie_score_cf(cf_data, "Mark Williams", similarity_metric='Cosine', k=5)
+
+# Compare to actual
+actual = cf_data.loc["Mark Williams", "ROOKIE_SCORE"]
+print(f"Predicted: {predicted:.2f} vs Actual: {actual:.2f}")
+
+
+
+
+
+
+
+
+
 # Defining collab_filter function
 def collab_filter(data, target_player, similarity_metric='L2', k=5):
-    # Check if the student is in our dataset
+    # Check if the player is in our dataset
     if target_player not in data.index:
         print(f"Error: {target_player} not found in the dataset.")
         return None
     
-    # Get the student's ratings
+    # Get the player's ratings
     user_ratings = data.loc[target_player]
     
     # Check if the user has missing ratings
