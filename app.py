@@ -219,6 +219,9 @@ def main():
         1. Navigate to the "Model Visualization" page using the sidebar
         2. View the model's predictions vs actual performance
         3. Analyze the model's accuracy and performance metrics
+
+        ### Authors
+        Amaey Pandit, Derrick Gan, Benjamin Rice
         """)
         
         # Display sample data
