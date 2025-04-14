@@ -10,7 +10,7 @@ from scipy.spatial.distance import cosine, euclidean
 # Load data
 rookie_and_combine = pd.read_csv("combined.csv")
 
-# Define the combine features to use for scoring
+# Define the combine features that we are using to calculate our weighted combine rating
 combine_features = [
     'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN', 'STANDING_REACH', 'BODY_FAT_PCT',
     'HAND_LENGTH', 'HAND_WIDTH', 'LANE_AGILITY_TIME', 'THREE_QUARTER_SPRINT',
@@ -19,13 +19,14 @@ combine_features = [
 
 center_positions = ['C', 'PF-C', 'C-PF', 'PF']
 
-# Step 1: Get all center players
+# Filtering the dataset for our positions of interest and filtering for relevant players who have played more than 20 games
+# in their rookie season
 center_df = rookie_and_combine[
     rookie_and_combine['POSITION'].isin(center_positions) &
     (rookie_and_combine['GAMES_PLAYED'] >= 20)
 ].copy()
 
-# Step 2: Fill missing combine values with average for centers
+# Fill missing combine values with average for our positions
 center_feature_means = center_df[combine_features].mean()
 center_df[combine_features] = center_df[combine_features].fillna(center_feature_means)
 
@@ -34,7 +35,8 @@ scaler = StandardScaler()
 scaled_features = scaler.fit_transform(center_df[combine_features])
 scaled_df = pd.DataFrame(scaled_features, columns=combine_features)
 
-# Assign weights (subjective, can be optimized)
+# Assign weights (these are weights from what we have researched and measured ourselves 
+# in terms of what attributes in the combine would be more valuable to the positions)
 weights = np.array([
     0.15,  # HEIGHT_WO_SHOES
     0.1,   # WEIGHT
@@ -62,6 +64,7 @@ df_features = center_df.set_index("PLAYER_NAME")
 # Build matrix for CF and drop rows with missing rookie scores
 cf_data = df_features[combine_features + ['ROOKIE_SCORE']].dropna()
 
+# Collaborative filtering function (simliar to what we did in the homework)
 def predict_rookie_score_cf(data, target_player, similarity_metric='L2', k=5):
     if target_player not in data.index:
         print(f"Error: {target_player} not found in dataset.")
@@ -100,6 +103,7 @@ def predict_rookie_score_cf(data, target_player, similarity_metric='L2', k=5):
 
     return weighted_sum / sim_sum if sim_sum != 0 else np.nan
 
+# Created this so our model can predict all the players in our dataset
 def predict_rookies(data, player_list, similarity_metric='L2', k=5):
     predictions = {}
     for player in player_list:
@@ -110,10 +114,9 @@ def predict_rookies(data, player_list, similarity_metric='L2', k=5):
             predictions[player] = f"Error: {str(e)}"
     return predictions
 
-# Step 7: Get the list of center player names (with combine features filled)
 center_players = cf_data.index.tolist()
 
-# Step 8: Predict rookie scores
+# Prediction
 center_predictions = predict_rookies(cf_data, center_players, similarity_metric='Cosine', k=5)
 
 # Print predictions
