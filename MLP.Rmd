@@ -1,0 +1,131 @@
+---
+title: "NBA Combine MLP"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(caret)
+library(dplyr)
+```
+
+## Load and Preprocess Data
+```{r load-data}
+df <- read.csv("combined.csv")
+
+features <- c('WEIGHT', 'HAND_WIDTH', 'LANE_AGILITY_TIME',
+              'THREE_QUARTER_SPRINT', 'MAX_VERTICAL_LEAP',
+              'MODIFIED_LANE_AGILITY_TIME', 'GAMES_PLAYED')
+
+df <- na.omit(df[, c(features, 'ROOKIE_SCORE', 'PLAYER_NAME')])
+
+X <- as.matrix(df[, features])
+y <- as.matrix(df$ROOKIE_SCORE)
+
+X_min <- apply(X, 2, min)
+X_max <- apply(X, 2, max)
+X <- sweep(X, 2, X_min, `-`) %>% sweep(2, X_max - X_min, `/`)
+X <- cbind(1, X)
+
+set.seed(42)
+split <- createDataPartition(y, p = 0.8, list = FALSE)
+X_train <- X[split, ]; X_test <- X[-split, ]
+y_train <- y[split, ]; y_test <- y[-split]
+```
+
+## Activation Functions
+```{r activation-functions}
+tanh_fn <- function(x) tanh(x)
+tanh_deriv <- function(x) 1 - tanh(x)^2
+
+leaky_relu <- function(x, leak = 0.01) ifelse(x > 0, x, leak * x)
+leaky_relu_deriv <- function(x, leak = 0.01) ifelse(x > 0, 1, leak)
+```
+
+## MLP Initialization and Forward Pass
+```{r init-forward}
+init_mlp <- function(input_dim, hidden1, hidden2) {
+  list(
+    W1 = matrix(rnorm(input_dim * hidden1, sd = 0.1), nrow = input_dim),
+    W2 = matrix(rnorm(hidden1 * hidden2, sd = 0.1), nrow = hidden1),
+    W3 = matrix(rnorm(hidden2, sd = 0.1), nrow = hidden2),
+    leak = 0.01
+  )
+}
+
+forward_pass <- function(model, X) {
+  z1 <- X %*% model$W1
+  h1 <- tanh_fn(z1)
+  z2 <- h1 %*% model$W2
+  h2 <- leaky_relu(z2, model$leak)
+  y_hat <- h2 %*% model$W3
+  list(z1 = z1, h1 = h1, z2 = z2, h2 = h2, y_hat = y_hat)
+}
+
+mse <- function(pred, actual) mean((pred - actual)^2)
+```
+
+## Training with Manual Gradient Descent
+```{r train-model}
+train_mlp <- function(model, X, y, lr = 0.01, epochs = 1000) {
+  n <- nrow(X)
+  errors <- numeric(epochs)
+  
+  for (epoch in 1:epochs) {
+    fwd <- forward_pass(model, X)
+    pred <- fwd$y_hat
+    error <- pred - y
+    
+    dz3 <- error / n
+    dW3 <- t(fwd$h2) %*% dz3
+
+    dh2 <- dz3 %*% t(model$W3)
+    dz2 <- dh2 * leaky_relu_deriv(fwd$z2, model$leak)
+    dW2 <- t(fwd$h1) %*% dz2
+
+    dh1 <- dz2 %*% t(model$W2)
+    dz1 <- dh1 * tanh_deriv(fwd$z1)
+    dW1 <- t(X) %*% dz1
+
+    model$W1 <- model$W1 - lr * dW1
+    model$W2 <- model$W2 - lr * dW2
+    model$W3 <- model$W3 - lr * dW3
+
+    errors[epoch] <- mse(pred, y)
+    if (epoch %% 100 == 0) cat("Epoch", epoch, "Loss:", errors[epoch], "\n")
+  }
+  list(model = model, errors = errors)
+}
+```
+
+## Fit and Evaluate the Model
+```{r fit-eval}
+model <- init_mlp(ncol(X_train), 32, 16)
+result <- train_mlp(model, X_train, y_train, lr = 0.01, epochs = 5000)
+model <- result$model
+y_pred <- forward_pass(model, X_test)$y_hat
+
+cat("Test MSE:", mse(y_pred, y_test), "\n")
+
+baseline_pred <- mean(y_train)
+baseline_mse <- mse(rep(baseline_pred, length(y_test)), y_test)
+cat("Baseline MSE:", baseline_mse, "\n")
+
+r2 <- 1 - sum((y_test - y_pred)^2) / sum((y_test - mean(y_test))^2)
+cat("R^2 Score:", r2, "\n")
+```
+
+## Visualization
+```{r plot}
+results <- tibble(Actual = y_test, Predicted = y_pred)
+
+ggplot(results, aes(x = Actual, y = Predicted)) +
+  geom_point(alpha = 0.7) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Predicted vs Actual ROOKIE_SCORE",
+       x = "Actual",
+       y = "Predicted") +
+  theme_minimal()
+```
