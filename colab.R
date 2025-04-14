@@ -39,14 +39,14 @@ weights <- c(
   0.1,   # WEIGHT
   0.15,  # WINGSPAN
   0.15,  # STANDING_REACH
-  -0.1,   # BODY_FAT_PCT
+ -0.1,   # BODY_FAT_PCT
   0.05,  # HAND_LENGTH
   0.05,  # HAND_WIDTH
-  -0.1,   # LANE_AGILITY_TIME
-  -0.1,   # THREE_QUARTER_SPRINT
+ -0.1,   # LANE_AGILITY_TIME
+ -0.1,   # THREE_QUARTER_SPRINT
   0.1,   # STANDING_VERTICAL_LEAP
   0.1,   # MAX_VERTICAL_LEAP
-  -0.05   # MODIFIED_LANE_AGILITY_TIME
+ -0.05   # MODIFIED_LANE_AGILITY_TIME
 )
 
 # Calculate Combine_Rating
@@ -74,27 +74,27 @@ predict_rookie_score_cf <- function(data, target_player, similarity_metric = "L2
     message(paste("Error:", target_player, "not found in dataset."))
     return(NA)
   }
-  
+
   features <- data[, setdiff(colnames(data), "ROOKIE_SCORE")]
   known_scores <- data$ROOKIE_SCORE
-  
+
   target_vec <- as.numeric(features[target_player, ])
-  
+
   similarities <- sapply(rownames(data), function(player) {
     if (player == target_player || is.na(known_scores[player])) return(NA)
     other_vec <- as.numeric(features[player, ])
     compute_similarity(target_vec, other_vec, method = similarity_metric)
   })
-  
+
   sim_df <- data.frame(Player = names(similarities), Similarity = similarities, stringsAsFactors = FALSE) %>%
     filter(!is.na(Similarity)) %>%
     mutate(NormSim = rescale(Similarity))
-  
+
   top_k <- head(sim_df[order(-sim_df$NormSim), ], k)
-  
+
   weighted_sum <- sum(top_k$NormSim * known_scores[top_k$Player])
   sim_sum <- sum(top_k$NormSim)
-  
+
   if (sim_sum == 0) return(NA)
   return(weighted_sum / sim_sum)
 }
