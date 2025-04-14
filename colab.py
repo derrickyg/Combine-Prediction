@@ -115,7 +115,7 @@ df_features = center_df.set_index("PLAYER_NAME")
 # Build the full matrix for CF
 cf_data = df_features[combine_features + ['ROOKIE_SCORE']]
 
-def predict_multiple_rookies_cf(data, player_list, similarity_metric='L2', k=5):
+def predict_rookies(data, player_list, similarity_metric='L2', k=5):
     predictions = {}
 
     for player in player_list:
@@ -132,7 +132,7 @@ def predict_multiple_rookies_cf(data, player_list, similarity_metric='L2', k=5):
 center_players = center_df['PLAYER_NAME'].tolist()
 
 # Step 8: Predict rookie scores
-center_predictions = predict_multiple_rookies_cf(cf_data, center_players, similarity_metric='Cosine', k=5)
+center_predictions = predict_rookies(cf_data, center_players, similarity_metric='Cosine', k=5)
 
 for player, predicted_score in center_predictions.items():
     actual_score = cf_data.loc[player, 'ROOKIE_SCORE'] if player in cf_data.index else "N/A"
