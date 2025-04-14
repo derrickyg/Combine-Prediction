@@ -21,9 +21,6 @@ def preprocess_data():
     ]
     df = df.dropna(subset=features + ['ROOKIE_SCORE', 'PLAYER_NAME'])
 
-    correlations = df[features + ['ROOKIE_SCORE']].corr()
-    print(correlations['ROOKIE_SCORE'].sort_values(ascending=False))
-
     X = df[features].values
     y = df['ROOKIE_SCORE'].values.reshape(-1, 1)
     names = df['PLAYER_NAME'].values
@@ -117,7 +114,6 @@ class MLP:
 
 
 
-
 if __name__ == "__main__":
     X_train, X_test, y_train, y_test, names_train, names_test = preprocess_data()
     model = MLP(input_dim=X_train.shape[1], hidden_dim1=32, hidden_dim2=16)
@@ -141,8 +137,7 @@ if __name__ == "__main__":
     feature_weights = np.sum(np.abs(model.W1[1:, :]), axis=1)
 
     features = [
-        'WEIGHT',
-        'HAND_WIDTH', 'LANE_AGILITY_TIME',
+        'WEIGHT', 'HAND_WIDTH', 'LANE_AGILITY_TIME',
         'THREE_QUARTER_SPRINT', 'MAX_VERTICAL_LEAP',
         'MODIFIED_LANE_AGILITY_TIME', 'GAMES_PLAYED'
     ]

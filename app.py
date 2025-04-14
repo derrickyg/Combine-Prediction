@@ -193,14 +193,7 @@ def main():
     
     # Add some spacing
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
-    
-    # Add footer to sidebar
-    st.sidebar.markdown("""
-        <div style="text-align: center; margin-top: 50px; font-size: 0.8rem; color: #666;">
-            <p>NBA Combine Prediction</p>
-            <p>© 2023</p>
-        </div>
-    """, unsafe_allow_html=True)
+
     
     # Display content based on current page
     if st.session_state.current_page == "Home":
@@ -214,23 +207,21 @@ def main():
         - NBA Combine measurements (height, weight, wingspan, etc.)
         - Strength and agility metrics
         - Rookie year statistics
-        
-        ### Features
-        - **Combine Metrics**: Physical measurements and athletic performance data
-        - **Position Encoding**: One-hot encoded player positions
-        - **Rookie Stats**: First-year performance metrics
-        
+
+                    
         ### Model
         The project uses a Multilayer Perceptron (MLP) neural network to predict rookie performance
         based on combine measurements. The model takes into account:
         - Anthropometric measurements
         - Strength and agility metrics
-        - Player position
         
         ### How to Use
         1. Navigate to the "Model Visualization" page using the sidebar
         2. View the model's predictions vs actual performance
         3. Analyze the model's accuracy and performance metrics
+
+        ### Authors
+        Amaey Pandit, Derrick Gan, Benjamin Rice
         """)
         
         # Display sample data
@@ -250,14 +241,12 @@ def main():
         This interactive visualization shows the model's predictions versus actual rookie performance scores.
         - **Blue dots**: Training data predictions
         - **Green dots**: Test data predictions
-        - **Red dashed line**: Perfect prediction line
         - **R² Score**: Indicates how well the model fits the data
         
         **Interactive Features:**
         - Hover over data points to see player details
         - Zoom in/out using the mouse wheel or pinch gestures
         - Pan by clicking and dragging
-        - Reset the view using the home button in the toolbar
         """)
         
         # Create and display the plot

@@ -6,6 +6,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from scipy.spatial.distance import cosine, euclidean
+from sklearn.metrics import r2_score, mean_squared_error
 
 # Load data
 rookie_and_combine = pd.read_csv("combined.csv")
@@ -137,7 +138,8 @@ valid_players = [
 predicted_vals = [center_predictions[player] for player in valid_players]
 actual_vals = [cf_data.loc[player, 'ROOKIE_SCORE'] for player in valid_players]
 
-# Plot predicted vs actual
+
+# Step 3: Plot predicted vs actual
 plt.figure(figsize=(8, 6))
 plt.scatter(actual_vals, predicted_vals, alpha=0.7)
 plt.plot([min(actual_vals), max(actual_vals)], [min(actual_vals), max(actual_vals)], 'r--')
