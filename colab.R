@@ -1,17 +1,17 @@
-# Importing libraries
+# Load libraries
 library(dplyr)
 library(readr)
 library(ggplot2)
+library(caret)
 library(scales)
+library(tidyr)
+library(proxy)  # for cosine and Euclidean
 library(stringr)
-library(proxy)       # for cosine and euclidean
-library(tidyr)       # for data manipulation
-library(caret)       # for preprocessing like standardization
 
 # Load data
-rookie_and_combine <- read_csv("/Combine-Prediction/combined.csv")
+rookie_and_combine <- read_csv("combined.csv")
 
-# Define the combine features to use for scoring
+# Combine features
 combine_features <- c(
   'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN', 'STANDING_REACH', 'BODY_FAT_PCT',
   'HAND_LENGTH', 'HAND_WIDTH', 'LANE_AGILITY_TIME', 'THREE_QUARTER_SPRINT',
@@ -20,27 +20,20 @@ combine_features <- c(
 
 center_positions <- c('C', 'PF-C', 'C-PF', 'PF')
 
-# Step 1: Get all center players
+# Filter center players with at least 20 games played
 center_df <- rookie_and_combine %>%
-  filter(POSITION %in% center_positions & GAMES_PLAYED >= 20)
+  filter(POSITION %in% center_positions, GAMES_PLAYED >= 20)
 
-# Step 2: Fill missing combine values with average for centers
-center_df[combine_features] <- center_df %>%
-  select(all_of(combine_features)) %>%
-  mutate(across(everything(), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .)))
+# Fill NA combine features with column means (centers only)
+center_df[combine_features] <- center_df[combine_features] %>%
+  mutate(across(everything(), ~ifelse(is.na(.), mean(., na.rm = TRUE), .)))
 
-# Standardize the features
-scaler <- preProcess(center_df[, combine_features], method = c("center", "scale"))
-scaled_features <- predict(scaler, center_df[, combine_features])
+# Standardize combine features
+scaled_df <- scale(center_df[combine_features])
+colnames(scaled_df) <- paste0(combine_features, "_scaled")
+scaled_df <- as.data.frame(scaled_df)
 
-# Rename scaled feature columns
-colnames(scaled_features) <- paste0(combine_features, "_scaled")
-
-# Combine back with original data if needed
-# center_df <- bind_cols(center_df, scaled_features)
-
-# Assign weights (subjective, can be optimized)
-# Positive weights for performance-enhancing metrics, negative for times and body fat
+# Add weights (same order as combine_features)
 weights <- c(
   0.15,  # HEIGHT_WO_SHOES
   0.1,   # WEIGHT
@@ -56,129 +49,94 @@ weights <- c(
  -0.05   # MODIFIED_LANE_AGILITY_TIME
 )
 
-# Calculate weighted combine rating (dot product of scaled features and weights)
-center_df$Combine_Rating <- as.numeric(as.matrix(scaled_features) %*% weights)
+# Calculate Combine_Rating
+center_df$Combine_Rating <- as.matrix(scaled_df) %*% weights
 
-# Add Combine_Rating back into the original dataset
-rookie_and_combine$Combine_Rating <- NA
-rookie_and_combine$Combine_Rating[as.numeric(rownames(center_df))] <- center_df$Combine_Rating
+# Add back Combine_Rating to original dataset
+rookie_and_combine$Combine_Rating[match(center_df$PLAYER_NAME, rookie_and_combine$PLAYER_NAME)] <- center_df$Combine_Rating
 
+# --- Collaborative Filtering Functions ---
+
+# Helper: compute similarity
+compute_similarity <- function(a, b, method = "L2") {
+  if (method == "Cosine") {
+    return(1 - proxy::dist(rbind(a, b), method = "cosine")[1])
+  } else if (method == "L2") {
+    return(-proxy::dist(rbind(a, b), method = "Euclidean")[1])
+  } else {
+    stop("Choose 'Cosine' or 'L2'")
+  }
+}
+
+# Predict rookie score for a single player
 predict_rookie_score_cf <- function(data, target_player, similarity_metric = "L2", k = 5) {
   if (!(target_player %in% rownames(data))) {
-    cat(sprintf("Error: %s not found in dataset.\n", target_player))
+    message(paste("Error:", target_player, "not found in dataset."))
     return(NA)
   }
-  
-  # Separate features and known scores
-  features <- data %>% select(-ROOKIE_SCORE)
-  known_scores <- data$ROOKIE_SCORE
-  
-  # Get target vector
-  target_vector <- as.numeric(features[target_player, ])
 
-  similarities <- c()
-  
-  for (player in rownames(data)) {
-    if (player == target_player) next
-    if (is.na(known_scores[player])) next
-    
-    other_vector <- as.numeric(features[player, ])
-    
-    sim <- switch(similarity_metric,
-      "Cosine" = sum(target_vector * other_vector) / (sqrt(sum(target_vector^2)) * sqrt(sum(other_vector^2))),
-      "L2" = -dist(rbind(target_vector, other_vector), method = "euclidean"),
-      stop("Choose 'Cosine' or 'L2'")
-    )
-    
-    similarities[player] <- sim
-  }
-  
-  # Normalize similarities between 0 and 1
-  sim_df <- data.frame(Player = names(similarities), Similarity = unname(similarities)) %>%
-    mutate(Similarity = rescale(Similarity, to = c(0, 1))) %>%
-    arrange(desc(Similarity))
-  
-  # Take top k similar players
-  top_k <- head(sim_df, k)
-  
-  # Weighted average of rookie scores
-  weighted_sum <- sum(top_k$Similarity * known_scores[top_k$Player])
-  sim_sum <- sum(top_k$Similarity)
-  
-  predicted_score <- if (sim_sum != 0) weighted_sum / sim_sum else NA
-  return(predicted_score)
+  features <- data[, setdiff(colnames(data), "ROOKIE_SCORE")]
+  known_scores <- data$ROOKIE_SCORE
+
+  target_vec <- as.numeric(features[target_player, ])
+
+  similarities <- sapply(rownames(data), function(player) {
+    if (player == target_player || is.na(known_scores[player])) return(NA)
+    other_vec <- as.numeric(features[player, ])
+    compute_similarity(target_vec, other_vec, method = similarity_metric)
+  })
+
+  sim_df <- data.frame(Player = names(similarities), Similarity = similarities, stringsAsFactors = FALSE) %>%
+    filter(!is.na(Similarity)) %>%
+    mutate(NormSim = rescale(Similarity))
+
+  top_k <- head(sim_df[order(-sim_df$NormSim), ], k)
+
+  weighted_sum <- sum(top_k$NormSim * known_scores[top_k$Player])
+  sim_sum <- sum(top_k$NormSim)
+
+  if (sim_sum == 0) return(NA)
+  return(weighted_sum / sim_sum)
 }
 
+# Predict for multiple players
+predict_rookies <- function(data, player_list, similarity_metric = "L2", k = 5) {
+  sapply(player_list, function(player) {
+    tryCatch({
+      predict_rookie_score_cf(data, player, similarity_metric, k)
+    }, error = function(e) paste("Error:", e$message))
+  })
+}
 
-# Set the rownames to player name or ID
+# --- Run Prediction and Plot ---
+
+# Set rownames
+center_df <- center_df %>% drop_na(ROOKIE_SCORE)
 rownames(center_df) <- center_df$PLAYER_NAME
 
-# Build the full matrix for CF
-cf_data <- center_df %>%
-  select(all_of(c(combine_features, "ROOKIE_SCORE")))
+cf_data <- center_df[, c(combine_features, "ROOKIE_SCORE")]
 
-# Function to predict rookie scores for a list of players
-predict_rookies <- function(data, player_list, similarity_metric = "L2", k = 5) {
-  predictions <- list()
-  
-  for (player in player_list) {
-    result <- tryCatch(
-      {
-        predict_rookie_score_cf(data, player, similarity_metric = similarity_metric, k = k)
-      },
-      error = function(e) {
-        paste("Error:", e$message)
-      }
-    )
-    predictions[[player]] <- result
-  }
-  
-  return(predictions)
-}
+center_players <- rownames(cf_data)
 
-# Step 7: Get the list of center player names (with combine features filled)
-center_players <- center_df$PLAYER_NAME
-
-# Step 8: Predict rookie scores
+# Predict scores
 center_predictions <- predict_rookies(cf_data, center_players, similarity_metric = "Cosine", k = 5)
 
-# Step 9: Print predicted vs actual
-for (player in names(center_predictions)) {
-  predicted_score <- center_predictions[[player]]
-  actual_score <- if (player %in% rownames(cf_data)) cf_data[player, "ROOKIE_SCORE"] else NA
-  
-  if (is.numeric(predicted_score)) {
-    cat(sprintf("%s: Predicted = %.2f, Actual = %.2f\n", player, predicted_score, actual_score))
-  } else {
-    cat(sprintf("%s: Prediction Error - %s\n", player, predicted_score))
-  }
-}
-
-# Step 10: Filter only valid predictions with actual values
+# Filter valid predictions
 valid_players <- names(center_predictions)[
-  sapply(center_predictions, is.numeric) &
-    !is.na(unlist(center_predictions)) &
-    !is.na(cf_data[names(center_predictions), "ROOKIE_SCORE"])
+  !is.na(center_predictions) & !is.na(cf_data[names(center_predictions), "ROOKIE_SCORE"])
 ]
 
-# Step 2: Get predicted and actual values
-predicted_vals <- unlist(center_predictions[valid_players])
-actual_vals <- cf_data[valid_players, "ROOKIE_SCORE"]
-
-# Step 3: Create a data frame for plotting
-plot_df <- data.frame(
-  Actual = actual_vals,
-  Predicted = predicted_vals
+# Create data frame of predicted vs actual
+pred_df <- data.frame(
+  Player = valid_players,
+  Predicted = as.numeric(center_predictions[valid_players]),
+  Actual = cf_data[valid_players, "ROOKIE_SCORE"]
 )
 
-# Step 4: Plot predicted vs actual
-ggplot(plot_df, aes(x = Actual, y = Predicted)) +
+# Plot predicted vs actual
+ggplot(pred_df, aes(x = Actual, y = Predicted)) +
   geom_point(alpha = 0.7) +
-  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
-  labs(
-    title = "Predicted vs. Actual Rookie Scores (Centers)",
-    x = "Actual Rookie Score",
-    y = "Predicted Rookie Score"
-  ) +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5))
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+  labs(title = "Predicted vs. Actual Rookie Scores (Centers)",
+       x = "Actual Rookie Score", y = "Predicted Rookie Score") +
+  theme_minimal()
