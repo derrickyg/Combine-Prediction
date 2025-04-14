@@ -139,7 +139,7 @@ predicted_vals = [center_predictions[player] for player in valid_players]
 actual_vals = [cf_data.loc[player, 'ROOKIE_SCORE'] for player in valid_players]
 
 
-# Step 3: Plot predicted vs actual
+# Plot predicted vs actual
 plt.figure(figsize=(8, 6))
 plt.scatter(actual_vals, predicted_vals, alpha=0.7)
 plt.plot([min(actual_vals), max(actual_vals)], [min(actual_vals), max(actual_vals)], 'r--')
