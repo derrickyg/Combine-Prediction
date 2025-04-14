@@ -1,7 +1,7 @@
 # Importing libraries
 import numpy as np
 import pandas as pd
-import matplotlib as plt
+import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
@@ -10,42 +10,55 @@ from scipy.spatial.distance import cosine, euclidean
 # Load data
 rookie_and_combine = pd.read_csv("combined.csv")
 
-# Set index
-rookie_and_combine.set_index('PLAYER_NAME', inplace=True)
-
-# Define combine features
+# Define the combine features to use for scoring
 combine_features = [
     'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN', 'STANDING_REACH', 'BODY_FAT_PCT',
     'HAND_LENGTH', 'HAND_WIDTH', 'LANE_AGILITY_TIME', 'THREE_QUARTER_SPRINT',
     'STANDING_VERTICAL_LEAP', 'MAX_VERTICAL_LEAP', 'MODIFIED_LANE_AGILITY_TIME'
 ]
 
-# Drop rows with missing combine features
-rookie_and_combine_filtered = rookie_and_combine.dropna(subset=combine_features).copy()
+center_positions = ['C', 'PF-C', 'C-PF', 'PF']
 
-# Scale features
+# Step 1: Get all center players
+center_df = rookie_and_combine[
+    rookie_and_combine['POSITION'].isin(center_positions) &
+    (rookie_and_combine['GAMES_PLAYED'] >= 20)
+].copy()
+
+
+# Step 2: Fill missing combine values with average for centers
+center_feature_means = center_df[combine_features].mean()
+center_df[combine_features] = center_df[combine_features].fillna(center_feature_means)
+
+
+# Standardize the features
 scaler = StandardScaler()
-scaled_features = scaler.fit_transform(rookie_and_combine_filtered[combine_features])
-scaled_df = pd.DataFrame(scaled_features, columns=combine_features, index=rookie_and_combine_filtered.index)
+scaled_features = scaler.fit_transform(center_df[combine_features])
+scaled_df = pd.DataFrame(scaled_features, columns=[f"{col}_scaled" for col in combine_features])
 
-# Assign weights (custom)
+# Assign weights (subjective, can be optimized)
+# Positive weights for performance-enhancing metrics, negative for times and body fat
 weights = np.array([
-    0.15, 0.1, 0.15, 0.15, -0.1,
-    0.05, 0.05, -0.1, -0.1,
-    0.1, 0.1, -0.05
+    0.15,  # HEIGHT_WO_SHOES
+    0.1,   # WEIGHT
+    0.15,  # WINGSPAN
+    0.15,  # STANDING_REACH
+   -0.1,   # BODY_FAT_PCT
+    0.05,  # HAND_LENGTH
+    0.05,  # HAND_WIDTH
+   -0.1,   # LANE_AGILITY_TIME
+   -0.1,   # THREE_QUARTER_SPRINT
+    0.1,   # STANDING_VERTICAL_LEAP
+    0.1,   # MAX_VERTICAL_LEAP
+   -0.05   # MODIFIED_LANE_AGILITY_TIME
 ])
 
-# Compute combine rating
-rookie_and_combine_filtered['COMBINE_RATING'] = scaled_df.dot(weights)
+# Calculate weighted combine rating
+center_df['Combine_Rating'] = scaled_df.dot(weights)
 
-# Add Combine Rating back to original dataset
-rookie_and_combine.loc[rookie_and_combine_filtered.index, 'COMBINE_RATING'] = rookie_and_combine_filtered['COMBINE_RATING']
+# Add Combine_Rating back into the original dataset
+rookie_and_combine.loc[center_df.index, 'Combine_Rating'] = center_df['Combine_Rating']
 
-print(rookie_and_combine.columns.tolist())
-
-# ------------------------------------------
-# Collaborative Filtering Function
-# ------------------------------------------
 
 def predict_rookie_score_cf(data, target_player, similarity_metric='L2', k=5):
     if target_player not in data.index:
@@ -96,24 +109,64 @@ def predict_rookie_score_cf(data, target_player, similarity_metric='L2', k=5):
     return predicted_score
 
 # Set the index to player name or ID
-df_features = rookie_and_combine.set_index(['PLAYER_NAME'])
+df_features = center_df.set_index("PLAYER_NAME")
 
-# Keep only combine feature columns (already cleaned/standardized)
-combine_cols = [
-    'HEIGHT_WO_SHOES', 'WEIGHT', 'WINGSPAN', 'STANDING_REACH', 'BODY_FAT_PCT',
-    'HAND_LENGTH', 'HAND_WIDTH', 'LANE_AGILITY_TIME', 'THREE_QUARTER_SPRINT',
-    'STANDING_VERTICAL_LEAP', 'MAX_VERTICAL_LEAP', 'MODIFIED_LANE_AGILITY_TIME'
-]
 
 # Build the full matrix for CF
-cf_data = df_features[combine_cols + ['ROOKIE_SCORE']].dropna(subset=combine_cols)
+cf_data = df_features[combine_features + ['ROOKIE_SCORE']]
 
-# Predict rookie score for a player like "Mark Williams"
-predicted = predict_rookie_score_cf(cf_data, "Mark Williams", similarity_metric='Cosine', k=5)
+def predict_multiple_rookies_cf(data, player_list, similarity_metric='L2', k=5):
+    predictions = {}
 
-# Compare to actual
-actual = cf_data.loc["Mark Williams", "ROOKIE_SCORE"]
-print(f"Predicted: {predicted:.2f} vs Actual: {actual:.2f}")
+    for player in player_list:
+        try:
+            prediction = predict_rookie_score_cf(data, player, similarity_metric=similarity_metric, k=k)
+            predictions[player] = prediction
+        except Exception as e:
+            predictions[player] = f"Error: {str(e)}"
+
+    return predictions
+
+
+# Step 7: Get the list of center player names (with combine features filled)
+center_players = center_df['PLAYER_NAME'].tolist()
+
+# Step 8: Predict rookie scores
+center_predictions = predict_multiple_rookies_cf(cf_data, center_players, similarity_metric='Cosine', k=5)
+
+for player, predicted_score in center_predictions.items():
+    actual_score = cf_data.loc[player, 'ROOKIE_SCORE'] if player in cf_data.index else "N/A"
+    
+    if isinstance(predicted_score, (float, int)):
+        print(f"{player}: Predicted = {predicted_score:.2f}, Actual = {actual_score}")
+    else:
+        print(f"{player}: Prediction Error - {predicted_score}")
+
+# Step 1: Filter only valid predictions with actual values
+valid_players = [
+    player for player, pred in center_predictions.items()
+    if isinstance(pred, (float, int)) and not np.isnan(pred)
+    and not pd.isna(cf_data.loc[player, 'ROOKIE_SCORE'])
+]
+
+# Step 2: Get predicted and actual values
+predicted_vals = [center_predictions[player] for player in valid_players]
+actual_vals = [cf_data.loc[player, 'ROOKIE_SCORE'] for player in valid_players]
+
+# Step 3: Plot predicted vs actual
+plt.figure(figsize=(8, 6))
+plt.scatter(actual_vals, predicted_vals, alpha=0.7)
+plt.plot([min(actual_vals), max(actual_vals)], [min(actual_vals), max(actual_vals)], 'r--')  # reference line y=x
+plt.xlabel('Actual Rookie Score')
+plt.ylabel('Predicted Rookie Score')
+plt.title('Predicted vs. Actual Rookie Scores (Centers)')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+
+
+
 
 
 
